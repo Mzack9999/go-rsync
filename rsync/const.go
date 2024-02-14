@@ -2,9 +2,10 @@ package rsync
 
 //nolint:revive,stylecheck
 const (
-	RSYNC_VERSION = "@RSYNCD: 27.0\n"
-	RSYNCD_OK     = "@RSYNCD: OK"
-	RSYNC_EXIT    = "@RSYNCD: EXIT"
+	RSYNC_VERSION  = "@RSYNCD: 27.0\n"
+	RSYNC_AUTHREQD = "@RSYNCD: AUTHREQD"
+	RSYNCD_OK      = "@RSYNCD: OK"
+	RSYNC_EXIT     = "@RSYNCD: EXIT"
 
 	K = 1 << 10
 	M = 1 << 20

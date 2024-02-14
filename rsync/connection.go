@@ -8,6 +8,7 @@ import (
 
 type SendReceiver interface {
 	Sync() error
+	List() error
 }
 
 // io.ReadWriteCloser

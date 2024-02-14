@@ -2,11 +2,42 @@ package rsync
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
+
+	"golang.org/x/crypto/md4"
 )
+
+type ClientOption func(*clientOptions)
+
+func WithClientAuth(username, password string) ClientOption {
+	return func(c *clientOptions) {
+		c.Auth = &ClientAuth{
+			Username: username,
+			Password: password,
+		}
+	}
+}
+
+func WithExclusionList(exclusionList ExclusionList) ClientOption {
+	return func(c *clientOptions) {
+		c.ExclusionList = exclusionList
+	}
+}
+
+type ClientAuth struct {
+	Username string
+	Password string
+}
+
+type clientOptions struct {
+	Auth          *ClientAuth
+	ExclusionList ExclusionList
+}
 
 /* As a Client, we need to:
 1. connect to server by socket or ssh
@@ -17,7 +48,16 @@ import (
 
 // TODO: passes more arguments: cmd
 // Connect to rsync daemon
-func SocketClient(storage FS, address string, module string, path string, _ map[string]string) (SendReceiver, error) {
+func SocketClient(storage FS, address string, module string, path string, opts ...ClientOption) (SendReceiver, error) {
+	clientOptions := clientOptions{
+		Auth:          nil,
+		ExclusionList: make(ExclusionList, 0),
+	}
+
+	for _, opt := range opts {
+		opt(&clientOptions)
+	}
+
 	skt, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
@@ -41,7 +81,7 @@ func SocketClient(storage FS, address string, module string, path string, _ map[
 
 	// recv(version)
 	var remoteProtocol, remoteProtocolSub int
-	_, err = fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
+	_, err = fmt.Sscanf(versionStr, "@RSYNCD: %d.%d\n", &remoteProtocol, &remoteProtocolSub)
 	if err != nil {
 		log.Println(err)
 	}
@@ -64,9 +104,39 @@ func SocketClient(storage FS, address string, module string, path string, _ map[
 		if err != nil {
 			return nil, err
 		}
+
 		log.Print(res)
+
 		if strings.Contains(res, RSYNCD_OK) {
+			log.Println("OK")
 			break
+		}
+
+		// Check for auth request
+		if strings.Contains(res, RSYNC_AUTHREQD) {
+			if clientOptions.Auth == nil {
+				return nil, fmt.Errorf("server requires auth")
+			}
+
+			// Parse challenge from server
+			var challenge string
+			_, err = fmt.Sscanf(res, "@RSYNCD: AUTHREQD %s", &challenge)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse challenge")
+			}
+
+			// Calculate challenge response with md4 of password + challenge
+			h := md4.New()
+			h.Write([]byte("\x00\x00\x00\x00"))
+			io.WriteString(h, clientOptions.Auth.Password)
+			io.WriteString(h, challenge)
+			buf.WriteString(fmt.Sprintf("%s %s\n", clientOptions.Auth.Username, base64.RawStdEncoding.EncodeToString(h.Sum(nil))))
+
+			_, err = conn.Write(buf.Bytes())
+			if err != nil {
+				return nil, err
+			}
+			buf.Reset()
 		}
 	}
 
@@ -79,6 +149,7 @@ func SocketClient(storage FS, address string, module string, path string, _ map[
 	if err != nil {
 		return nil, err
 	}
+	buf.Reset()
 
 	// read int32 as seed
 	seed, err := conn.ReadInt()
@@ -93,8 +164,8 @@ func SocketClient(storage FS, address string, module string, path string, _ map[
 	// Begin to demux
 	conn.Reader = NewMuxReader(conn.Reader)
 
-	// As a client, we need to send filter list
-	err = conn.WriteInt(EXCLUSION_END)
+	// Send exclusion list
+	err = clientOptions.ExclusionList.SendExlusionList(conn)
 	if err != nil {
 		return nil, err
 	}

@@ -408,3 +408,20 @@ func (r *Receiver) Sync() error {
 	}
 	return nil
 }
+
+func (r *Receiver) List() error {
+	defer func() {
+		log.Println("Task completed", r.Conn.Close()) // TODO: How to handle errors from Close
+	}()
+
+	rfiles, _, err := r.RecvFileList()
+	if err != nil {
+		return err
+	}
+	log.Println("Remote files count:", len(rfiles))
+
+	if err := r.FinalPhase(); err != nil {
+		return err
+	}
+	return nil
+}

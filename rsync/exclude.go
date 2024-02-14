@@ -1,10 +1,5 @@
 package rsync
 
-import (
-	"path/filepath"
-	"strings"
-)
-
 // Reference: rsync 2.6.0
 // --exclude & --exclude-from
 
@@ -19,37 +14,13 @@ The rest we added to suit ourself.
 */
 
 // Filter List
-type Exclusion struct {
-	Patterns []string
-	Root     string
-}
-
-func (e *Exclusion) Match(name string) (matched bool, err error) {
-	matched = false
-	for _, p := range e.Patterns {
-		if strings.HasPrefix(name, p) && name[len(p)] == '/' {
-			return true, nil
-		}
-		if matched, err = filepath.Match(p, name); matched || err != nil {
-			break
-		}
-	}
-	return
-}
-
-func (e *Exclusion) Add(pattern string) {
-	// Check the root, if not empty, join them
-	e.Patterns = append(e.Patterns, filepath.Join(e.Root, pattern))
-}
+type ExclusionList []string
 
 // This is only called by the client
-func (e *Exclusion) SendExlusion(conn Conn) error {
-	// If list_only && !recurse, add '/*/*'
-
+func (e ExclusionList) SendExlusionList(conn *Conn) error {
 	// For each item, send its length first
-	for _, p := range e.Patterns {
+	for _, p := range e {
 		plen := int32(len(p))
-		// TODO: If a dir, append a '/' at the end
 		if err := conn.WriteInt(plen); err != nil {
 			return err
 		}
