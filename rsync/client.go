@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	"golang.org/x/crypto/md4"
+	"golang.org/x/crypto/md4" //nolint // md4 is used for rsync protocol
 )
 
 type ClientOption func(*clientOptions)
@@ -128,8 +128,16 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 			// Calculate challenge response with md4 of password + challenge
 			h := md4.New()
 			h.Write([]byte("\x00\x00\x00\x00"))
-			io.WriteString(h, clientOptions.Auth.Password)
-			io.WriteString(h, challenge)
+			_, err := io.WriteString(h, clientOptions.Auth.Password)
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = io.WriteString(h, challenge)
+			if err != nil {
+				return nil, err
+			}
+
 			buf.WriteString(fmt.Sprintf("%s %s\n", clientOptions.Auth.Username, base64.RawStdEncoding.EncodeToString(h.Sum(nil))))
 
 			_, err = conn.Write(buf.Bytes())
