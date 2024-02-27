@@ -1,7 +1,6 @@
 package rsync
 
 import (
-	"log"
 	"strconv"
 	"strings"
 
@@ -67,14 +66,14 @@ func SplitURI(uri string) (string, string, string, error) {
 		i := strings.IndexByte(first, '/')
 		if i == -1 {
 			// No module name
-			return "", "", "", errors.New("No module name")
+			return "", "", "", errors.New("no module name")
 		}
 		second = first[i+1:] // ignore '/'
 		first = first[:i]
 	} else {
 		// Only for remote
 		/* host::module[/path] */
-		log.Fatalln("No implement yet")
+		return "", "", "", errors.New("format not supported yet")
 	}
 
 	address = first

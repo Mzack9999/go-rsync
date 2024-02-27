@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 )
 
 //Multiplexing
@@ -26,13 +26,15 @@ type MuxReader struct {
 	In     io.ReadCloser
 	Remain uint32 // Default value: 0
 	Header []byte // Size: 4 bytes
+	Logger *slog.Logger
 }
 
-func NewMuxReader(reader io.ReadCloser) *MuxReader {
+func NewMuxReader(reader io.ReadCloser, logger *slog.Logger) *MuxReader {
 	return &MuxReader{
 		In:     reader,
 		Remain: 0,
 		Header: make([]byte, 4),
+		Logger: logger,
 	}
 }
 
@@ -61,7 +63,7 @@ func (r *MuxReader) readHeader() error {
 		tag := r.Header[3]                                        // Little Endian
 		size := (binary.LittleEndian.Uint32(r.Header) & 0xffffff) // TODO: zero?
 
-		log.Printf("<DEMUX> tag %d size %d\n", tag, size)
+		r.Logger.Debug("demux", slog.Int("tag", int(tag)), slog.Int("size", int(size)))
 
 		if tag == (MUX_BASE + MSG_DATA) { // MUX_BASE + MSG_DATA
 			r.Remain = size

@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -29,6 +29,12 @@ func WithExclusionList(exclusionList ExclusionList) ClientOption {
 	}
 }
 
+func WithLogger(logger *slog.Logger) ClientOption {
+	return func(c *clientOptions) {
+		c.Logger = logger
+	}
+}
+
 type ClientAuth struct {
 	Username string
 	Password string
@@ -37,6 +43,7 @@ type ClientAuth struct {
 type clientOptions struct {
 	Auth          *ClientAuth
 	ExclusionList ExclusionList
+	Logger        *slog.Logger
 }
 
 /* As a Client, we need to:
@@ -49,13 +56,14 @@ type clientOptions struct {
 // TODO: passes more arguments: cmd
 // Connect to rsync daemon
 func SocketClient(storage FS, address string, module string, path string, opts ...ClientOption) (SendReceiver, error) {
-	clientOptions := clientOptions{
+	co := clientOptions{
 		Auth:          nil,
 		ExclusionList: make(ExclusionList, 0),
+		Logger:        slog.Default(),
 	}
 
 	for _, opt := range opts {
-		opt(&clientOptions)
+		opt(&co)
 	}
 
 	skt, err := net.Dial("tcp", address)
@@ -83,9 +91,9 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 	var remoteProtocol, remoteProtocolSub int
 	_, err = fmt.Sscanf(versionStr, "@RSYNCD: %d.%d\n", &remoteProtocol, &remoteProtocolSub)
 	if err != nil {
-		log.Println(err)
+		co.Logger.Error("failed to parse version", slog.String("error", err.Error()))
 	}
-	log.Println(versionStr)
+	co.Logger.Debug("remote protocol", slog.Int("protocol", remoteProtocol), slog.Int("sub", remoteProtocolSub))
 
 	buf := new(bytes.Buffer)
 
@@ -105,16 +113,14 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 			return nil, err
 		}
 
-		log.Print(res)
-
 		if strings.Contains(res, RSYNCD_OK) {
-			log.Println("OK")
+			co.Logger.Debug("OK received")
 			break
 		}
 
 		// Check for auth request
 		if strings.Contains(res, RSYNC_AUTHREQD) {
-			if clientOptions.Auth == nil {
+			if co.Auth == nil {
 				return nil, fmt.Errorf("server requires auth")
 			}
 
@@ -128,7 +134,7 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 			// Calculate challenge response with md4 of password + challenge
 			h := md4.New()
 			h.Write([]byte("\x00\x00\x00\x00"))
-			_, err := io.WriteString(h, clientOptions.Auth.Password)
+			_, err := io.WriteString(h, co.Auth.Password)
 			if err != nil {
 				return nil, err
 			}
@@ -138,7 +144,7 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 				return nil, err
 			}
 
-			buf.WriteString(fmt.Sprintf("%s %s\n", clientOptions.Auth.Username, base64.RawStdEncoding.EncodeToString(h.Sum(nil))))
+			buf.WriteString(fmt.Sprintf("%s %s\n", co.Auth.Username, base64.RawStdEncoding.EncodeToString(h.Sum(nil))))
 
 			_, err = conn.Write(buf.Bytes())
 			if err != nil {
@@ -164,16 +170,16 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 	if err != nil {
 		return nil, err
 	}
-	log.Println("SEED", seed)
+	co.Logger.Debug("seed received", slog.Any("seed", seed))
 
 	// HandShake OK
-	log.Println("Handshake completed")
+	co.Logger.Debug("handshake completed")
 
 	// Begin to demux
-	conn.Reader = NewMuxReader(conn.Reader)
+	conn.Reader = NewMuxReader(conn.Reader, co.Logger)
 
 	// Send exclusion list
-	err = clientOptions.ExclusionList.SendExlusionList(conn)
+	err = co.ExclusionList.SendExlusionList(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -186,6 +192,7 @@ func SocketClient(storage FS, address string, module string, path string, opts .
 		Path:    path,
 		Seed:    seed,
 		Storage: storage,
+		Logger:  co.Logger,
 	}, nil
 }
 
