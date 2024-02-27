@@ -1,6 +1,7 @@
 package rsync
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -92,6 +93,28 @@ func SplitURI(uri string) (string, string, string, error) {
 	module = second
 
 	return address, module, path, nil
+}
+
+// For rsync
+func SplitURL(url *url.URL) (string, string, string, error) {
+	hostport := url.Host
+	// Default port: 873
+	if !strings.Contains(hostport, ":") {
+		hostport += ":873"
+	}
+
+	split := strings.SplitN(url.Path, "/", 3)
+	if len(split) < 1 {
+		return "", "", "", errors.New("no module name")
+	}
+	module := split[1]
+
+	path := ""
+	if len(split) > 2 {
+		path = split[2]
+	}
+
+	return hostport, module, path, nil
 }
 
 // The path always has a trailing slash appended
