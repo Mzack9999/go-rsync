@@ -63,8 +63,6 @@ func (r *MuxReader) readHeader() error {
 		tag := r.Header[3]                                        // Little Endian
 		size := (binary.LittleEndian.Uint32(r.Header) & 0xffffff) // TODO: zero?
 
-		r.Logger.Debug("demux", slog.Int("tag", int(tag)), slog.Int("size", int(size)))
-
 		if tag == (MUX_BASE + MSG_DATA) { // MUX_BASE + MSG_DATA
 			r.Remain = size
 			return nil

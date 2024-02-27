@@ -257,8 +257,6 @@ func (r *Receiver) FileDownloader(localList FileList) error {
 				return err
 			}
 
-			r.Logger.Debug("token", slog.Int64("token", int64(token)))
-
 			if token == 0 {
 				break
 			} else if token < 0 {
@@ -273,7 +271,6 @@ func (r *Receiver) FileDownloader(localList FileList) error {
 			}
 
 			downloadeSize += int(token)
-			r.Logger.Debug("Downloaded", slog.Int64("size", int64(token)))
 
 			if _, err := bufwriter.Write(ctx); err != nil {
 				return err
