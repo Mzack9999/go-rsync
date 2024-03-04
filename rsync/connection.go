@@ -8,6 +8,7 @@ import (
 
 type SendReceiver interface {
 	Sync() error
+	GetSyncPlan() (*SyncPlan, error)
 	List() error
 }
 

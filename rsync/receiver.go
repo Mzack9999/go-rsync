@@ -385,6 +385,55 @@ func (r *Receiver) Sync() error {
 	return nil
 }
 
+type SyncPlan struct {
+	RemoteFiles      FileList
+	LocalFiles       FileList
+	AddRemoteFiles   []int
+	DeleteLocalFiles []int
+	Symlinks         map[string][]byte
+}
+
+func (r *Receiver) GetSyncPlan() (*SyncPlan, error) {
+	defer func() {
+		r.Conn.Close() // TODO: How to handle errors from Close
+		r.Logger.Debug("task completed")
+	}()
+
+	lfiles, err := r.Storage.List()
+	if err != nil {
+		return nil, err
+	}
+
+	rfiles, symlinks, err := r.RecvFileList()
+	if err != nil {
+		return nil, err
+	}
+	r.Logger.Debug("remote files count", slog.Int64("count", int64(len(rfiles))))
+
+	ioerr, err := r.Conn.ReadInt()
+	if err != nil {
+		return nil, err
+	}
+	r.Logger.Debug("ioerr", slog.Int64("ioerr", int64(ioerr)))
+
+	newfiles, oldfiles := lfiles.Diff(rfiles)
+	if len(newfiles) == 0 && len(oldfiles) == 0 {
+		r.Logger.Debug("there is nothing to do") // TODO: Return here?
+	}
+
+	if err := r.FinalPhase(); err != nil {
+		return nil, err
+	}
+
+	return &SyncPlan{
+		RemoteFiles:      rfiles,
+		LocalFiles:       lfiles,
+		AddRemoteFiles:   newfiles,
+		DeleteLocalFiles: oldfiles,
+		Symlinks:         symlinks,
+	}, nil
+}
+
 func (r *Receiver) List() error {
 	defer func() {
 		r.Conn.Close() // TODO: How to handle errors from Close
