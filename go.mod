@@ -1,4 +1,4 @@
-module github.com/Mzack9999/rsync
+module github.com/Mzack9999/go-rsync
 
 go 1.24.0
 
