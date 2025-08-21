@@ -9,7 +9,7 @@ import (
 type SendReceiver interface {
 	Sync() error
 	GetSyncPlan() (*SyncPlan, error)
-	List() error
+	List() (FileList, error)
 }
 
 // io.ReadWriteCloser
@@ -101,7 +101,7 @@ func (conn *Conn) Close() error {
 }
 
 func readLine(conn *Conn) (string, error) {
-	// until \n, then add \0
+	// Read until newline, which is what rsync daemon uses
 	line := new(bytes.Buffer)
 	for {
 		c, err := conn.ReadByte()
@@ -110,22 +110,19 @@ func readLine(conn *Conn) (string, error) {
 		}
 
 		if c == '\r' {
-			continue
+			continue // Skip carriage returns
+		}
+
+		if c == '\n' {
+			break // End of line
 		}
 
 		err = line.WriteByte(c)
 		if err != nil {
 			return "", err
 		}
-
-		if c == '\n' {
-			line.WriteByte(0)
-			break
-		}
-
-		if c == 0 {
-			break
-		}
 	}
+
+	// Return the line without the newline
 	return line.String(), nil
 }

@@ -434,7 +434,7 @@ func (r *Receiver) GetSyncPlan() (*SyncPlan, error) {
 	}, nil
 }
 
-func (r *Receiver) List() error {
+func (r *Receiver) List() (FileList, error) {
 	defer func() {
 		r.Conn.Close() // TODO: How to handle errors from Close
 		r.Logger.Debug("task completed")
@@ -442,12 +442,12 @@ func (r *Receiver) List() error {
 
 	rfiles, _, err := r.RecvFileList()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	r.Logger.Debug("remote files count", slog.Int64("count", int64(len(rfiles))))
 
 	if err := r.FinalPhase(); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return rfiles, nil
 }
